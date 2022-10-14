@@ -40,10 +40,39 @@ app.config[
 mail.init_app(app)
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 print("loading geodata files...")
-plz_geo_data = geopandas.read_file(
-    ROOT_DIR + r'/data/landuse_polygons.zip', encoding='utf-8')
+admin_zones_data = geopandas.read_file(
+    ROOT_DIR + r'/data/administrative_zones.zip', encoding='utf-8')
+places_data = geopandas.read_file(
+    ROOT_DIR + r'/data/places.zip', encoding='utf-8')
+pois_data = geopandas.read_file(
+    ROOT_DIR + r'/data/pois.zip', encoding='utf-8')
+
+print("Creating Base Map...")
+# create base map
+map = folium.Map(location=(51.5074631, 11.4801049), zoom_start=10, min_zoom=4, tiles="OpenStreetMap",
+                 prefer_canvas=True)
+
+fs = Fullscreen()
+
+pois = folium.FeatureGroup(name="pois")
+
+for data, fclass in zip(pois_data.get("geometry"), pois_data.get("fclass")):
+    folium.Circle(location=(data.y, data.x), fill=True, radius=5, tooltip=fclass).add_to(pois)
+
+pois.add_to(map)
+
+map.add_child(fs)
+
+folium.LayerControl().add_to(map)
+
+
+print("Creating HTML...")
+html = map._repr_html_(L_PREFER_CANVAS=True)
+
 print("Done!")
+
 
 
 @app.context_processor
@@ -99,15 +128,15 @@ def well_map():
     #                        tiles='cartodbpositron'
     #                        )
 
-    map = folium.Map(zoom_start=10)
 
-    fs = Fullscreen()
 
-    # adding an extra map background in the layer menu
-    folium.TileLayer('OpenStreetMap').add_to(
-        map)  # this adds tiles to the map, can also receive custom tiles
+    #folium.Choropleth(admin_zones_data).add_to(map)
+    #folium.Choropleth(places_data).add_to(map)
+    #folium.Choropleth(pois_data).add_to(map)
 
-    folium.Choropleth(plz_geo_data).add_to(map)
+
+
+
 
     # """ defining parameters for our markers and the popups when clicking on single markers """
     # callback = ('function (row) {'
@@ -137,11 +166,9 @@ def well_map():
     #
     # folium.LayerControl().add_to(map_wells)  # adding layers to map
 
-    map.add_child(fs)
 
-    folium.LayerControl().add_to(map)
 
-    return map._repr_html_()  # return map as an html representation
+    return html  # return map as an html representation
 
 
 if __name__ == '__main__':
