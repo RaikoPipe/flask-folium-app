@@ -48,6 +48,8 @@ places_data = geopandas.read_file(
     ROOT_DIR + r'/data/places.zip', encoding='utf-8')
 pois_data = geopandas.read_file(
     ROOT_DIR + r'/data/pois.zip', encoding='utf-8')
+flur_data = geopandas.read_file(
+    ROOT_DIR + r'/data/flurstueck.zip', encoding='utf-8')
 
 print("Creating Base Map...")
 # create base map
@@ -56,12 +58,25 @@ map = folium.Map(location=(51.5074631, 11.4801049), zoom_start=10, min_zoom=4, t
 
 fs = Fullscreen()
 
+
 pois = folium.FeatureGroup(name="pois")
+flur_layer = folium.FeatureGroup(name="flur")
 
 for data, fclass in zip(pois_data.get("geometry"), pois_data.get("fclass")):
     folium.Circle(location=(data.y, data.x), fill=True, radius=5, tooltip=fclass).add_to(pois)
 
+flur_data = flur_data.to_crs(4326) # convert to a EPSG4326 coordinate system
+
+for geometry, gemarkung, flur, flurstnr in flur_data.get(["geometry", "GEMARKUNG", "FLUR", "FLURSTNR"]).itertuples(index=False):
+
+    sim_geo = geopandas.GeoSeries(geometry)
+    geo_j = sim_geo.to_json()
+    geo_folium = folium.GeoJson(data=geo_j, tooltip="hi", style_function=lambda x: {"fillColor": "#0000ff"})
+    folium.Popup(f"{gemarkung}").add_to(geo_folium)
+    geo_folium.add_to(map)
+
 pois.add_to(map)
+#flur_layer.add_to(map)
 
 map.add_child(fs)
 
@@ -69,7 +84,7 @@ folium.LayerControl().add_to(map)
 
 
 print("Creating HTML...")
-html = map._repr_html_(L_PREFER_CANVAS=True)
+html = map._repr_html_()
 
 print("Done!")
 
@@ -83,7 +98,6 @@ def inject_today_date():
 @app.route('/')
 def home():
     return render_template('home.html')
-
 
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
@@ -174,3 +188,5 @@ def well_map():
 if __name__ == '__main__':
     # app.run(debug=True)
     app.run("0.0.0.0", port=80, debug=False)  # added host parameters for docker container
+
+

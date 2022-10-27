@@ -9,7 +9,7 @@ def export_to_csv(file_name:str):
     with open(ROOT_DIR + "\\export\\" + file_name.replace(".zip", ".csv"), "w", encoding='utf-8') as f:
         print("reading file...")
         wells_explo = geopandas.read_file(
-            ROOT_DIR + "\\data\\" + file_name, encoding='utf-8', rows=1000)
+            ROOT_DIR + "\\import\\" + file_name, encoding='utf-8', rows=1000)
 
         wells_explo = pd.DataFrame(wells_explo)
 
@@ -19,7 +19,7 @@ def export_to_csv(file_name:str):
     print("DONE!")
 
 # traverse root directory, and list directories as dirs and files as files
-for root, dirs, files in os.walk(ROOT_DIR + r'/data'):
+for root, dirs, files in os.walk(ROOT_DIR + r'/import'):
     for file in files:
         export_to_csv(file)
 
