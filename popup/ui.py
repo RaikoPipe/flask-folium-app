@@ -1,6 +1,6 @@
 
 
-def popup_html(row):
+def popup_html(row, df):
     i = row
     institution_name = df['INSTNM'].iloc[i]
     institution_url = df['URL'].iloc[i]

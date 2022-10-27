@@ -1,11 +1,16 @@
 from flask_wtf import FlaskForm
-from wtforms import TextField, TextAreaField, SubmitField, validators, ValidationError
+import wtforms as wtf
 
 
 class ContactForm(FlaskForm):
-    name = TextField("Name",  [validators.Required()])
-    email = TextField("Email",  [validators.Required(
-        "Please enter your email address."), validators.Email("Please enter your email address.")])
-    subject = TextField("Subject",  [validators.Required()])
-    message = TextAreaField("Message",  [validators.Required()])
-    submit = SubmitField("Send")
+    name = wtf.StringField("Name",  [wtf.validators.data_required()])
+    email = wtf.StringField("Email",  [wtf.validators.data_required(
+        "Please enter your email address."), wtf.validators.Email("Please enter your email address.")])
+    subject = wtf.StringField("Subject",  [wtf.validators.data_required()])
+    message = wtf.TextAreaField("Message",  [wtf.validators.data_required()])
+    submit = wtf.SubmitField("Send")
+
+class InputForm(FlaskForm):
+    rangefield = wtf.IntegerRangeField()
+    filefield = wtf.FileField()
+    submitfield = wtf.SubmitField("submitfield")
