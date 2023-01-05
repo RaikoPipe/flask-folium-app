@@ -1,28 +1,17 @@
 import os
-import traceback
 
-from flask import Flask, render_template, request, flash
+from flask import Flask, render_template, request, flash,make_response, render_template_string
 from flask_mail import Message, Mail
-import folium
-from folium.plugins import FastMarkerCluster
-from folium.plugins import Fullscreen
 import datetime
 
 from forms import ContactForm, InputForm
-
-import numpy as np
-import pandas as pd
-import geopandas
-from shapely.geometry import Point
-
-import requests
-import json
-import re
-import urllib.request
+from flask_cors import CORS
 
 mail = Mail()
 
 app = Flask(__name__)
+CORS(app)
+
 
 app.secret_key = '****************'
 
@@ -47,9 +36,9 @@ def inject_today_date():
     return {'year': datetime.date.today().year}
 
 
-@app.route('/')
-def home():
-    return render_template('home.html')
+# @app.route('/')
+# def home():
+#     return render_template('home.html')
 
 
 @app.route('/contact', methods=['GET', 'POST'])
@@ -79,58 +68,24 @@ def input():
     return render_template('input.html', form=form)
 
 
+@app.route('/')
+def test():
+
+    return render_template("station_info_window.html")
+
 @app.route('/map')
-def well_map():
-    # wells_explo = geopandas.read_file()
-    # wells_explo['wlbEwDesDeg'] = wells_explo['geometry'].x
-    # wells_explo['wlbNsDecDeg'] = wells_explo['geometry'].y
-    #
-    # wells_explo_sel = wells_explo.filter(
-    #     ['wbName', 'well_name', 'discovery', 'field', 'prodLicenc', 'well_type', 'drilOperat',
-    #      'entryYear', 'cmplYear', 'content', 'main_area', 'totalDepth', 'age_at_TD', 'fmTD',
-    #      'discWelbor', 'geometry', 'wlbEwDesDeg', 'wlbNsDecDeg'],
-    #     axis=1)
-    #
-    # wells_explo_all = wells_explo_sel.loc[wells_explo_sel['well_type'].isin([
-    #     'EXPLORATION'])]
-    #
-    # map_wells = folium.Map(location=[wells_explo_all['wlbNsDecDeg'].mean(),
-    #                                  wells_explo_all['wlbEwDesDeg'].mean()],
-    #                        zoom_start=5,
-    #                        tiles='cartodbpositron'
-    #                        )
+def show_map():
 
-    # folium.Choropleth(admin_zones_data).add_to(map)
-    # folium.Choropleth(places_data).add_to(map)
-    # folium.Choropleth(pois_data).add_to(map)
+    return render_template("map.html")
 
-    # """ defining parameters for our markers and the popups when clicking on single markers """
-    # callback = ('function (row) {'
-    #             'var marker = L.marker(new L.LatLng(row[0], row[1]));'
-    #             'var icon = L.AwesomeMarkers.icon({'
-    #             "icon: 'star',"
-    #             "iconColor: 'black',"
-    #             "markerColor: 'lightgray',"
-    #             '});'
-    #             'marker.setIcon(icon);'
-    #             "var popup = L.popup({maxWidth: '300'});"
-    #             "const display_text = {text: '<b>Name: </b>' + row[2] + '</br>' + '<b> Age at TD: </b>' + row[3]};"
-    #             "var mytext = $(`<div id='mytext' class='display_text' style='width: 100.0%; height: 100.0%;'> ${display_text.text}</div>`)[0];"
-    #             "popup.setContent(mytext);"
-    #             "marker.bindPopup(popup);"
-    #             'return marker};')
-
-    # """ creating clusters with FastMarkerCluster """
-    # fmc = FastMarkerCluster(wells_explo_all[[
-    #     'wlbNsDecDeg', 'wlbEwDesDeg', 'wbName', 'age_at_TD']].values.tolist(), callback=callback)
-    # fmc.layer_name = 'Exploration Wells'
-    #
-    # map_wells.add_child(fmc)  # adding fastmarkerclusters to map
-    # map_wells.add_child(fs)  # adding fullscreen button to map
-    #
-    # folium.LayerControl().add_to(map_wells)  # adding layers to map
-
-    return  # return map as an html representation
+@app.route("/window", methods = ["POST"])
+def window():
+    if request.method == "POST":
+        # datafromjs = request.form['mydata']
+        result = "return this"
+        resp = make_response('{"response": ' + result + '}')
+        resp.headers['Content-Type'] = "application/json"
+        return resp
 
 
 if __name__ == '__main__':
