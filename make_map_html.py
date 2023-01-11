@@ -10,6 +10,7 @@ import numpy as np
 from folium.plugins import FastMarkerCluster
 from folium.plugins import Fullscreen, HeatMap
 from branca.element import Template, MacroElement
+from folium.plugins import MarkerCluster
 
 import geopandas
 import logging
@@ -22,18 +23,86 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 districts = ["Mansfeld-Südharz"]
 roads = {"motorway": "red", "trunk": "orange", "primary": "yellow", "secondary": "green", "tertiary": "blue"}
-railways = {"rail": "red", "light_rail": "orange", "tram": "blue"}
+railways = {"rail": "magenta", "light_rail": "brown", "tram": "light_blue"}
 
 landuse_exceptions = ("forest", "meadow", "military", "quarry", "orchard", "vineyard", "scrub", "grass", "heath",
                       "farmland", "farmyard", "national_park", "nature_reserve", "allotments")
 
-transport_station_exceptions = ("taxi_rank", "helipad", "apron", "ferry_terminal")
+transport_station_exceptions = ("taxi", "taxi_rank", "helipad", "apron", "ferry_terminal", "airport", "airfield",
+                                "aerialway_station")
 
-poi_category = {
-    # health category
-    **dict.fromkeys(["clinic", "hospital"], "health")
+poi_categories = {
+    # health
+    **dict.fromkeys(["clinic", "hospital", "doctors", "pharmacy", ], "health"),
+    # education
+    **dict.fromkeys(["university", "school", "college", "library"], "education"),
+    # tourism
+    **dict.fromkeys(["arts_centre", "tourist_info", "tourist_guidepost", "attraction",
+                     "museum", "monument", "zoo", "theme_park", "hotel", "bed_and_breakfast", "guesthouse",
+                     ""], "tourism"),
+    # leisure
+    **dict.fromkeys(["cinema", "theatre", "night_club", "community_centre", "restaurant", "fast_food", "pub", "bar", ],
+                    "leisure"),
+    # shopping
+    **dict.fromkeys(["supermarket", "bakery", "kiosk", "mall", "department_store", "general", "convenience", "clothes",
+                     "florist", "chemist", "bookshop", "butcher", "shoe_shop", "beverages", "optician", "jeweller",
+                     "gift_shop",
+                     "sports_shop", "stationery", "outdoor_shop", "mobile_phone_shop", "toy_shop", "newsagent",
+                     "sports_shop", "stationery", "outdoor_shop", "mobile_phone_shop", "toy_shop", "newsagent",
+                     "greengrocer", "beauty_shop", "video_shop", "car_dealership", "bicycle_shop", "doityourself",
+                     "furniture_shop", "computer_shop", "garden_centre", "hairdresser", "car_repair", "car_sharing",
+                     "bicycle_rental", "travel_agent", "laundry"], "shopping"),
+    # mobility services
+    **dict.fromkeys(["car_sharing", "bicycle_rental"], "mobility"),
 }
 
+poi_category_color = {"health": "green", "tourism": "blue", "shopping": "yellow", "leisure": "red",
+                      "education": "black", "mobility": "lightblue"}
+
+parking = {"parking":0, "parking_site": 0, "parking_multistorey":0, "parking_underground":0, "parking_bicycle":0}
+
+transport_station_hierarchy = {
+    **dict.fromkeys(["railway_station", "railway_halt"], 0),
+    **dict.fromkeys(["bus_station"], 1),
+    **dict.fromkeys(["bus_stop", "tram_stop"], 2)}
+
+hierarchy_distance = {0:100, 1:100, 2: 50}
+
+def remove_exceptions_from_data(geo_data_frame, exceptions):
+    drop = []
+    for idx, geometry, fclass, name in geo_data_frame.get(["geometry", "fclass", "name"]).itertuples(
+        index=True):
+
+        if isinstance(exceptions, dict):
+            if fclass not in exceptions.keys():
+                drop.append(idx)
+        elif isinstance(exceptions, list) or isinstance(exceptions, tuple):
+            if fclass in exceptions:
+                drop.append(idx)
+
+    return geo_data_frame.drop(labels=drop, axis=0)
+
+def remove_redundant_stations(geo_data_frame):
+    # option 1
+    # points_within_bounds.drop_duplicates(subset=["name"])
+    # option 2
+
+    geo_data_frame = geo_data_frame.to_crs(32643)
+    drop = []
+    # filter according to hierarchy; if hierarchy is same, drop
+    for idx_1, geometry_1,fclass_1, name_1 in geo_data_frame.get(["geometry", "fclass", "name"]).itertuples(index=True):
+        for idx_2, geometry_2,fclass_2, name_2 in geo_data_frame.get(["geometry", "fclass", "name"]).itertuples(index=True):
+            check_distance = hierarchy_distance[transport_station_hierarchy[fclass_1]]
+            if geometry_1.distance(geometry_2) < check_distance and idx_1 != idx_2:
+                if transport_station_hierarchy[fclass_1]<=transport_station_hierarchy[fclass_2]:
+                    drop.append(idx_2)
+    geo_data_frame = geo_data_frame.drop(labels=drop, axis=0)
+    geo_data_frame = geo_data_frame.to_crs(4326)
+    return geo_data_frame
+
+def remove_duplicate_station(geo_data_frame):
+    """removes stations with the same name."""
+    return geo_data_frame.drop_duplicates(subset=["name"])
 
 class Map:
     def __init__(self):
@@ -47,16 +116,24 @@ class Map:
         folium.TileLayer("CartoDB positron").add_to(self.map)
         folium.TileLayer("CartoDB dark_matter").add_to(self.map)
 
+        self.test_point = folium.Circle(location=(51.5184191, 11.5490143), radius=300)
+        self.test_point.get_bounds()
+
         logging.info("Adding layers")
         self.bounds: GeoDataFrame = self.get_district_bounds()
-        self.add_railways()
-        self.add_roads()
-        self.add_landuse_a_fg()
+        # self.add_railways()
+        # self.add_roads()
+        # self.add_landuse_a_fg()
         self.add_test_marker_fg()
         self.add_transport_stations()
-        self.add_pois_fg()
+        # self.add_pois_fg()
         self.add_landkreis()
+        # self.add_buildings_a_fg()
+        self.add_parking_fg()
         # self.add_login_window()
+        self.add_pois_near_stations()
+        #self.add_parking_near_stations()
+        self.add_parking_zones()
 
         logging.info("Adding plugins...")
         fs = Fullscreen()
@@ -101,6 +178,7 @@ class Map:
         landkreise_fg.add_to(self.map)
 
     def add_pois_fg(self):
+        # todo: only add POIs that are within the radius of a station
         pois_data = geopandas.read_file(
             ROOT_DIR + r'/data/pois.zip', encoding='utf-8')
         pois_data.to_crs(4326)
@@ -111,16 +189,130 @@ class Map:
         # make a heat map layer
         pois_geo = points_within_bounds.get("geometry")
         pois_array = np.array([(point.y, point.x) for point in pois_geo])
-        heatmap = HeatMap(data=pois_array, name="Heatmap POIs")
+        heatmap = HeatMap(data=pois_array, name="Heatmap All POIs")
         heatmap.add_to(self.map)
 
-        pois_fg = folium.FeatureGroup(name="POI")
+        poi_fg_sorted = {}
+        poi_marker_cluster = {}
+
+        for data, fclass, name in zip(points_within_bounds.get("geometry"), points_within_bounds.get("fclass"),
+                                      points_within_bounds.get("name")):
+            category = poi_categories.get(fclass)
+            if category not in poi_fg_sorted.keys() and fclass in poi_categories.keys():
+                category = poi_categories[fclass]
+                # update keys and marker cluster if fg doesn't exist yet
+                poi_fg_sorted.update({category: folium.FeatureGroup(name=category)})
+                poi_marker_cluster.update({category: MarkerCluster(name=f"{category} marker cluster")})
+
+            if fclass in poi_categories.keys():
+                folium.Circle(location=(data.y, data.x), fill=True, radius=5, tooltip=fclass,
+                              color=poi_category_color[category]).add_to(
+                    poi_fg_sorted[category])
+                folium.Marker(location=(data.y, data.x), tooltip=fclass).add_to(poi_marker_cluster[category])
+
+        for fg in poi_fg_sorted.values():
+            fg.add_to(self.map)
+
+        for mc in poi_marker_cluster.values():
+            mc.add_to(self.map)
+
+    def add_pois_near_stations(self):
+        pois_data = geopandas.read_file(
+            ROOT_DIR + r'/data/pois.zip', encoding='utf-8')
+        pois_data.to_crs(4326)
+
+        # filter points in chosen district
+        points_within_bounds = geopandas.sjoin(pois_data, self.bounds, predicate="within")
+        points_within_bounds = remove_exceptions_from_data(points_within_bounds, poi_categories)
+        points_within_bounds = self.get_geo_data_within_stations(points_within_bounds)
+
+
+        # make a heat map layer
+        pois_geo = points_within_bounds.get("geometry")
+        pois_array = np.array([(point.y, point.x) for point in pois_geo])
+        heatmap = HeatMap(data=pois_array, name="Heatmap All POIs NS")
+        heatmap.add_to(self.map)
+
+        poi_fg_sorted = {}
+        poi_marker_cluster = {}
+
+        for data, fclass, name in zip(points_within_bounds.get("geometry"), points_within_bounds.get("fclass"),
+                                      points_within_bounds.get("name")):
+            category = poi_categories.get(fclass)
+            if category not in poi_fg_sorted.keys() and fclass in poi_categories.keys():
+                category = poi_categories[fclass]
+                # update keys and marker cluster if fg doesn't exist yet
+                poi_fg_sorted.update({category: folium.FeatureGroup(name=category)})
+                poi_marker_cluster.update({category: MarkerCluster(name=f"{category} marker cluster NS")})
+
+            if fclass in poi_categories.keys():
+                folium.Circle(location=(data.y, data.x), fill=True, radius=5, tooltip=fclass,
+                              color=poi_category_color[category], popup=folium.Popup(name)).add_to(
+                    poi_fg_sorted[category])
+                folium.Marker(location=(data.y, data.x), tooltip=fclass).add_to(poi_marker_cluster[category])
+
+        for fg in poi_fg_sorted.values():
+            fg.add_to(self.map)
+
+        for mc in poi_marker_cluster.values():
+            mc.add_to(self.map)
+
+    def add_parking_fg(self):
+        parking_data = geopandas.read_file(
+            ROOT_DIR + r'/data/traffic.zip', encoding='utf-8')
+        parking_data.to_crs(4326)
+
+        # filter points in chosen district
+        points_within_bounds = geopandas.sjoin(parking_data, self.bounds, predicate="within")
+
+        parking_marker_cluster = MarkerCluster(name="parking marker cluster")
+
+        # make a heat map layer
+        pois_geo = points_within_bounds.get("geometry")
+        pois_array = np.array([(point.y, point.x) for point in pois_geo])
+        heatmap = HeatMap(data=pois_array, name="Heatmap Parking")
+        heatmap.add_to(self.map)
+
+        parking_fg = folium.FeatureGroup(name="Parking")
 
         for data, fclass in zip(points_within_bounds.get("geometry"), points_within_bounds.get("fclass")):
-            folium.Circle(location=(data.y, data.x), fill=True, radius=5, tooltip=fclass).add_to(pois_fg)
 
-        pois_fg.add_to(self.map)
-        self.map.keep_in_front(pois_fg)
+            if fclass in parking.keys():
+                folium.Circle(location=(data.y, data.x), fill=True, radius=5, tooltip=fclass).add_to(
+                    parking_fg)
+                folium.Marker(location=(data.y, data.x), tooltip=fclass).add_to(parking_marker_cluster)
+
+        parking_marker_cluster.add_to(self.map)
+        parking_fg.add_to(self.map)
+
+    def add_parking_near_stations(self):
+        parking_data = geopandas.read_file(
+            ROOT_DIR + r'/data/traffic.zip', encoding='utf-8')
+        parking_data.to_crs(4326)
+
+        # filter points in chosen district
+        points_within_bounds = geopandas.sjoin(parking_data, self.bounds, predicate="within")
+        points_within_bounds = remove_exceptions_from_data(points_within_bounds, parking)
+        points_within_bounds = self.get_geo_data_within_stations(points_within_bounds)
+
+        parking_marker_cluster = MarkerCluster(name="parking marker cluster")
+
+        # make a heat map layer
+        pois_geo = points_within_bounds.get("geometry")
+        pois_array = np.array([(point.y, point.x) for point in pois_geo])
+        heatmap = HeatMap(data=pois_array, name="Heatmap Parking")
+        heatmap.add_to(self.map)
+
+        parking_fg = folium.FeatureGroup(name="Parking NS")
+
+        for data, fclass in zip(points_within_bounds.get("geometry"), points_within_bounds.get("fclass")):
+            folium.Circle(location=(data.y, data.x), fill=True, radius=5, tooltip=fclass).add_to(
+                parking_fg)
+            folium.Marker(location=(data.y, data.x), tooltip=fclass).add_to(parking_marker_cluster)
+
+        parking_marker_cluster.add_to(self.map)
+        parking_fg.add_to(self.map)
+        pass
 
     def add_landuse_a_fg(self):
         landuse_data = geopandas.read_file(
@@ -151,6 +343,67 @@ class Map:
         landuse_fg.add_to(self.map)
         self.map.keep_in_front(landuse_fg)
 
+    def add_buildings_a_fg(self):
+        buildings_data = geopandas.read_file(
+            ROOT_DIR + r'/data/gis_osm_buildings_a_free_1.zip', encoding='utf-8')
+
+        buildings_data.to_crs(4326)
+
+        buildings_fg = folium.FeatureGroup(name="Buildings")
+        #
+        # for polygon, fclass in zip(buildings_data.get("geometry"), buildings_data.get("fclass")):
+        #     if fclass not in buildings_exceptions:
+        #         locations = zip(*[iter(polygon)] * 2)
+        #
+        #         folium.Polygon(locations=locations, fill=True, radius=5, tooltip=fclass).add_to(buildings_fg)
+
+        # filter points in chosen district
+        points_within_bounds = geopandas.sjoin(buildings_data, self.bounds, predicate="within")
+
+        for geometry, fclass in points_within_bounds.get(
+                ["geometry", "fclass"]).itertuples(index=False):
+            sim_geo = geopandas.GeoSeries(geometry)
+            geo_j = sim_geo.to_json()
+            geo_folium = folium.GeoJson(data=geo_j, tooltip=fclass,
+                                        style_function=lambda x: {"fillColor": "blue"})
+            geo_folium.add_to(buildings_fg)
+
+        buildings_fg.add_to(self.map)
+        self.map.keep_in_front(buildings_fg)
+
+    def add_parking_zones(self):
+        parking_data = geopandas.read_file(
+            ROOT_DIR + r'/data/gis_osm_traffic_a_free_1.zip', encoding='utf-8')
+
+        parking_data.to_crs(4326)
+        parking_data = geopandas.sjoin(parking_data, self.bounds)
+        parking_data = self.get_geo_data_within_stations(parking_data)
+
+        parking_fg = folium.FeatureGroup(name="Parking Zones")
+
+        #
+        # for polygon, fclass in zip(buildings_data.get("geometry"), buildings_data.get("fclass")):
+        #     if fclass not in buildings_exceptions:
+        #         locations = zip(*[iter(polygon)] * 2)
+        #
+        #         folium.Polygon(locations=locations, fill=True, radius=5, tooltip=fclass).add_to(buildings_fg)
+
+        # filter points in chosen district
+        parking_data = parking_data.drop(['index_right'], axis=1)
+        #parking_data.rename("index_right", "idx_r")
+        points_within_bounds = geopandas.sjoin(parking_data, self.bounds, predicate="intersects")
+
+        for geometry, fclass in points_within_bounds.get(
+                ["geometry", "fclass"]).itertuples(index=False):
+            if fclass in parking.keys():
+                sim_geo = geopandas.GeoSeries(geometry)
+                geo_j = sim_geo.to_json()
+                geo_folium = folium.GeoJson(data=geo_j, tooltip=fclass,
+                                            style_function=lambda x: {"fillColor": "blue"})
+                geo_folium.add_to(parking_fg)
+
+        parking_fg.add_to(self.map)
+
     def add_flur_test_fg(self):
         flur_data = geopandas.read_file(
             ROOT_DIR + r'/data/flurstueck.zip', encoding='utf-8')
@@ -178,15 +431,15 @@ class Map:
 
         for geometry, fclass in railway_data.get(
                 ["geometry", "fclass"]).itertuples(index=False):
-            if fclass in railways.keys():
-                if fclass not in railways_fg_sorted.keys():
-                    railways_fg_sorted.update({fclass: folium.FeatureGroup(name=fclass)})
+            # if fclass in railways.keys():
+            if fclass not in railways_fg_sorted.keys():
+                railways_fg_sorted.update({fclass: folium.FeatureGroup(name=fclass)})
 
-                sim_geo = geopandas.GeoSeries(geometry)
-                geo_j = sim_geo.to_json()
-                geo_folium = folium.GeoJson(data=geo_j, tooltip=fclass,
-                                            style_function=lambda x, y=fclass: {"color": railways.get(y)})
-                geo_folium.add_to(railways_fg_sorted[fclass])
+            sim_geo = geopandas.GeoSeries(geometry)
+            geo_j = sim_geo.to_json()
+            geo_folium = folium.GeoJson(data=geo_j, tooltip=fclass,
+                                        style_function=lambda x, y=fclass: {"color": "magenta"})  # railways.get(y)})
+            geo_folium.add_to(railways_fg_sorted[fclass])
 
         for fg in railways_fg_sorted.values():
             fg.add_to(self.map)
@@ -216,13 +469,20 @@ class Map:
             fg.add_to(self.map)
 
     def add_transport_stations(self):
+        # todo: filter names if they are in other names
         stations_data = geopandas.read_file(
             ROOT_DIR + r'/data/gis_osm_transport_free_1.zip', encoding='utf-8')
+        stations_marker_cluster = MarkerCluster(name="Transport Stations Marker Cluster")
 
         stations_data.to_crs(4326)
 
         # filter points in chosen district
         points_within_bounds = geopandas.sjoin(stations_data, self.bounds, predicate="within")
+        points_within_bounds = remove_exceptions_from_data(points_within_bounds, transport_station_exceptions)
+        points_within_bounds = remove_duplicate_station(points_within_bounds)
+        points_within_bounds = remove_redundant_stations(points_within_bounds)
+
+        self.stations_geo_data = points_within_bounds
 
         # make a heat map layer
         stations_geo = zip(points_within_bounds.get("geometry"), points_within_bounds.get("fclass"))
@@ -233,10 +493,14 @@ class Map:
 
         stations_fg = folium.FeatureGroup(name="Bus-, Bahn und Tramstationen")
 
-        for data, fclass in zip(points_within_bounds.get("geometry"), points_within_bounds.get("fclass")):
-            folium.Circle(location=(data.y, data.x), fill=True, radius=50, tooltip=fclass).add_to(stations_fg)
+        for data, name, fclass in zip(points_within_bounds.get("geometry"), points_within_bounds.get("name"),
+                                      points_within_bounds.get("fclass")):
+            folium.Marker(location=(data.y, data.x), tooltip=fclass, popup=folium.Popup(name)).add_to(
+                stations_fg)
+            folium.Marker(location=(data.y, data.x), tooltip=fclass).add_to(stations_marker_cluster)
 
         stations_fg.add_to(self.map)
+        stations_marker_cluster.add_to(self.map)
         self.map.keep_in_front(stations_fg)
 
     def add_test_marker_fg(self):
@@ -253,8 +517,17 @@ class Map:
             station_info_popup = folium.Popup(iframe)
 
         test_marker_fg = folium.FeatureGroup(name="test marker")
-        test_marker = folium.Marker((51.5074631, 11.4801049), popup=station_info_popup)
+        test_marker = folium.Marker((51.5184191,11.5490143), popup=station_info_popup)
+        test_marker_circle = folium.Circle((51.5184191,11.5490143), radius=300, color="blue")
+
+        test_marker_local_station = folium.Marker((51.5282581,11.5455341), popup=station_info_popup)
+        test_marker_local_station_circle = folium.Circle((51.5282581,11.5455341), radius=300, color="lightblue")
+
+        test_marker_local_station.add_to(test_marker_fg)
+        test_marker_local_station_circle.add_to(test_marker_fg)
+
         test_marker.add_to(test_marker_fg)
+        test_marker_circle.add_to(test_marker_fg)
 
         test_marker_fg.add_to(self.map)
 
@@ -266,6 +539,25 @@ class Map:
         macro = MacroElement()
         macro._template = Template(template)
         self.map.get_root().add_child(macro)
+
+    def get_geo_data_within_stations(self, geo_data_frame):
+        drop = []
+        geo_data_frame = geo_data_frame.to_crs(32643)
+        stations_geo_data = self.stations_geo_data.to_crs(32643)
+        for idx_1, geometry_1, fclass_1, name_1 in geo_data_frame.get(["geometry", "fclass", "name"]).itertuples(
+                index=True):
+            counter = 0
+            for idx_2, geometry_2, fclass_2, name_2 in stations_geo_data.get(["geometry", "fclass", "name"]).itertuples(
+                index=True):
+                if geometry_1.distance(geometry_2) <= 300:
+                    counter += 1
+
+            if counter <= 0:
+                drop.append(idx_1)
+        geo_data_frame = geo_data_frame.drop(labels=drop, axis=0)
+        return geo_data_frame.to_crs(4326)
+
+
 
 
 if __name__ == "__main__":

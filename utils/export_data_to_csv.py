@@ -9,7 +9,7 @@ def export_to_csv(file_name:str):
     with open(ROOT_DIR + "\\export\\" + file_name.replace(".zip", ".csv"), "w", encoding='utf-8') as f:
         print("reading file...")
         wells_explo = geopandas.read_file(
-            ROOT_DIR + "\\import\\" + file_name, encoding='utf-8', rows=1000)
+            ROOT_DIR + "\\import\\" + file_name, encoding='utf-8')
 
         wells_explo = pd.DataFrame(wells_explo)
 
