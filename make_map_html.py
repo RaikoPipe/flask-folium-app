@@ -123,7 +123,7 @@ class Map:
         self.bounds: GeoDataFrame = self.get_district_bounds()
         self.add_railways()
         self.add_roads()
-        # self.add_landuse_a_fg()
+        self.add_landuse_a_fg()
         self.add_test_marker_fg()
         self.add_transport_stations()
         # self.add_pois_fg()
