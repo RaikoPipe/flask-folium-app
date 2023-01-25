@@ -121,8 +121,8 @@ class Map:
 
         logging.info("Adding layers")
         self.bounds: GeoDataFrame = self.get_district_bounds()
-        # self.add_railways()
-        # self.add_roads()
+        self.add_railways()
+        self.add_roads()
         # self.add_landuse_a_fg()
         self.add_test_marker_fg()
         self.add_transport_stations()
@@ -462,7 +462,7 @@ class Map:
                 sim_geo = geopandas.GeoSeries(geometry)
                 geo_j = sim_geo.to_json()
                 geo_folium = folium.GeoJson(data=geo_j, tooltip=fclass,
-                                            style_function=lambda x, y=fclass: {"color": roads.get(y)})
+                                            style_function=lambda x, y=fclass: {"color": "red"})#roads.get(y)})
                 geo_folium.add_to(road_fg_sorted[fclass])
 
         for fg in road_fg_sorted.values():
@@ -517,17 +517,28 @@ class Map:
             station_info_popup = folium.Popup(iframe)
 
         test_marker_fg = folium.FeatureGroup(name="test marker")
-        test_marker = folium.Marker((51.5184191,11.5490143), popup=station_info_popup)
-        test_marker_circle = folium.Circle((51.5184191,11.5490143), radius=300, color="blue")
+
+        test_marker_central_station = folium.Marker((51.5184191,11.5490143), popup=station_info_popup)
+        test_marker_central_station_circle = folium.Circle((51.5184191,11.5490143), radius=300, color="blue")
+        test_marker_central_station.add_to(test_marker_fg)
+        test_marker_central_station_circle.add_to(test_marker_fg)
 
         test_marker_local_station = folium.Marker((51.5282581,11.5455341), popup=station_info_popup)
         test_marker_local_station_circle = folium.Circle((51.5282581,11.5455341), radius=300, color="lightblue")
-
         test_marker_local_station.add_to(test_marker_fg)
         test_marker_local_station_circle.add_to(test_marker_fg)
 
-        test_marker.add_to(test_marker_fg)
-        test_marker_circle.add_to(test_marker_fg)
+        test_marker_decentral_station = folium.Marker((51.5116274,11.5734862), popup=station_info_popup)
+        test_marker_decentral_station_circle = folium.Circle((51.5116274,11.5734862), radius=300, color="cyan")
+        test_marker_decentral_station.add_to(test_marker_fg)
+        test_marker_decentral_station_circle.add_to(test_marker_fg)
+
+        test_marker_rural_central_station = folium.Marker((51.5129271,11.5062205), popup=station_info_popup)
+        test_marker_rural_central_station_circle = folium.Circle((51.5129271,11.5062205), radius=300, color="green")
+        test_marker_rural_central_station.add_to(test_marker_fg)
+        test_marker_rural_central_station_circle.add_to(test_marker_fg)
+
+
 
         test_marker_fg.add_to(self.map)
 
