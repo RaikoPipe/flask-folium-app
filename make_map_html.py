@@ -7,6 +7,7 @@ import webbrowser
 import branca.element
 import folium
 import numpy as np
+import pandas
 from folium.plugins import FastMarkerCluster
 from folium.plugins import Fullscreen, HeatMap
 from branca.element import Template, MacroElement
@@ -59,19 +60,20 @@ poi_categories = {
 poi_category_color = {"health": "green", "tourism": "blue", "shopping": "yellow", "leisure": "red",
                       "education": "black", "mobility": "lightblue"}
 
-parking = {"parking":0, "parking_site": 0, "parking_multistorey":0, "parking_underground":0, "parking_bicycle":0}
+parking = {"parking": 0, "parking_site": 0, "parking_multistorey": 0, "parking_underground": 0, "parking_bicycle": 0}
 
 transport_station_hierarchy = {
     **dict.fromkeys(["railway_station", "railway_halt"], 0),
     **dict.fromkeys(["bus_station"], 1),
     **dict.fromkeys(["bus_stop", "tram_stop"], 2)}
 
-hierarchy_distance = {0:100, 1:100, 2: 50}
+hierarchy_distance = {0: 100, 1: 100, 2: 50}
+
 
 def remove_exceptions_from_data(geo_data_frame, exceptions):
     drop = []
     for idx, geometry, fclass, name in geo_data_frame.get(["geometry", "fclass", "name"]).itertuples(
-        index=True):
+            index=True):
 
         if isinstance(exceptions, dict):
             if fclass not in exceptions.keys():
@@ -82,7 +84,8 @@ def remove_exceptions_from_data(geo_data_frame, exceptions):
 
     return geo_data_frame.drop(labels=drop, axis=0)
 
-def remove_redundant_stations(geo_data_frame):
+
+def remove_redundant(geo_data_frame):
     # option 1
     # points_within_bounds.drop_duplicates(subset=["name"])
     # option 2
@@ -90,19 +93,45 @@ def remove_redundant_stations(geo_data_frame):
     geo_data_frame = geo_data_frame.to_crs(32643)
     drop = []
     # filter according to hierarchy; if hierarchy is same, drop
-    for idx_1, geometry_1,fclass_1, name_1 in geo_data_frame.get(["geometry", "fclass", "name"]).itertuples(index=True):
-        for idx_2, geometry_2,fclass_2, name_2 in geo_data_frame.get(["geometry", "fclass", "name"]).itertuples(index=True):
+    for idx_1, geometry_1, fclass_1, name_1 in geo_data_frame.get(["geometry", "fclass", "name"]).itertuples(
+            index=True):
+        for idx_2, geometry_2, fclass_2, name_2 in geo_data_frame.get(["geometry", "fclass", "name"]).itertuples(
+                index=True):
             check_distance = hierarchy_distance[transport_station_hierarchy[fclass_1]]
             if geometry_1.distance(geometry_2) < check_distance and idx_1 != idx_2:
-                if transport_station_hierarchy[fclass_1]<=transport_station_hierarchy[fclass_2]:
+                if transport_station_hierarchy[fclass_1] <= transport_station_hierarchy[fclass_2]:
                     drop.append(idx_2)
     geo_data_frame = geo_data_frame.drop(labels=drop, axis=0)
     geo_data_frame = geo_data_frame.to_crs(4326)
     return geo_data_frame
 
-def remove_duplicate_station(geo_data_frame):
+
+def remove_duplicates(geo_data_frame):
     """removes stations with the same name."""
     return geo_data_frame.drop_duplicates(subset=["name"])
+
+
+def get_bounds(files, filter):
+    concat = []
+    for file in files:
+        data = geopandas.read_file(
+            ROOT_DIR + rf'/data/{file}', encoding='utf-8')
+        data = data.to_crs(4326)
+
+        concat.append(data)
+
+    df = geopandas.GeoDataFrame(pandas.concat(concat))
+
+    bounds = {}
+
+    for geometry, name in df.get(
+            ["geometry", "GN_KLAR"]).itertuples(index=False):
+        if name in filter:
+            sim_geo = geopandas.GeoSeries(geometry)
+            bounds[name] = geopandas.GeoDataFrame(geometry=sim_geo)
+
+    return bounds
+
 
 class Map:
     def __init__(self):
@@ -132,7 +161,7 @@ class Map:
         self.add_parking_fg()
         # self.add_login_window()
         self.add_pois_near_stations()
-        #self.add_parking_near_stations()
+        # self.add_parking_near_stations()
         self.add_parking_zones()
 
         logging.info("Adding plugins...")
@@ -225,7 +254,6 @@ class Map:
         points_within_bounds = geopandas.sjoin(pois_data, self.bounds, predicate="within")
         points_within_bounds = remove_exceptions_from_data(points_within_bounds, poi_categories)
         points_within_bounds = self.get_geo_data_within_stations(points_within_bounds)
-
 
         # make a heat map layer
         pois_geo = points_within_bounds.get("geometry")
@@ -390,7 +418,7 @@ class Map:
 
         # filter points in chosen district
         parking_data = parking_data.drop(['index_right'], axis=1)
-        #parking_data.rename("index_right", "idx_r")
+        # parking_data.rename("index_right", "idx_r")
         points_within_bounds = geopandas.sjoin(parking_data, self.bounds, predicate="intersects")
 
         for geometry, fclass in points_within_bounds.get(
@@ -438,7 +466,7 @@ class Map:
             sim_geo = geopandas.GeoSeries(geometry)
             geo_j = sim_geo.to_json()
             geo_folium = folium.GeoJson(data=geo_j, tooltip=fclass,
-                                        style_function=lambda x, y=fclass: {"color": "magenta"})  # railways.get(y)})
+                                        style_function=lambda x, y=fclass: {"color": railways[y]})  # railways.get(y)})
             geo_folium.add_to(railways_fg_sorted[fclass])
 
         for fg in railways_fg_sorted.values():
@@ -462,7 +490,7 @@ class Map:
                 sim_geo = geopandas.GeoSeries(geometry)
                 geo_j = sim_geo.to_json()
                 geo_folium = folium.GeoJson(data=geo_j, tooltip=fclass,
-                                            style_function=lambda x, y=fclass: {"color": "red"})#roads.get(y)})
+                                            style_function=lambda x, y=fclass: {"color": "red"})  # roads.get(y)})
                 geo_folium.add_to(road_fg_sorted[fclass])
 
         for fg in road_fg_sorted.values():
@@ -471,7 +499,7 @@ class Map:
     def add_transport_stations(self):
         # todo: filter names if they are in other names
         stations_data = geopandas.read_file(
-            ROOT_DIR + r'/data/gis_osm_transport_free_1.zip', encoding='utf-8')
+            ROOT_DIR + r'/data/transport_stations.zip', encoding='utf-8')
         stations_marker_cluster = MarkerCluster(name="Transport Stations Marker Cluster")
 
         stations_data.to_crs(4326)
@@ -479,8 +507,8 @@ class Map:
         # filter points in chosen district
         points_within_bounds = geopandas.sjoin(stations_data, self.bounds, predicate="within")
         points_within_bounds = remove_exceptions_from_data(points_within_bounds, transport_station_exceptions)
-        points_within_bounds = remove_duplicate_station(points_within_bounds)
-        points_within_bounds = remove_redundant_stations(points_within_bounds)
+        points_within_bounds = remove_duplicates(points_within_bounds)
+        points_within_bounds = remove_redundant(points_within_bounds)
 
         self.stations_geo_data = points_within_bounds
 
@@ -518,27 +546,25 @@ class Map:
 
         test_marker_fg = folium.FeatureGroup(name="test marker")
 
-        test_marker_central_station = folium.Marker((51.5184191,11.5490143), popup=station_info_popup)
-        test_marker_central_station_circle = folium.Circle((51.5184191,11.5490143), radius=300, color="blue")
+        test_marker_central_station = folium.Marker((51.5184191, 11.5490143), popup=station_info_popup)
+        test_marker_central_station_circle = folium.Circle((51.5184191, 11.5490143), radius=300, color="blue")
         test_marker_central_station.add_to(test_marker_fg)
         test_marker_central_station_circle.add_to(test_marker_fg)
 
-        test_marker_local_station = folium.Marker((51.5282581,11.5455341), popup=station_info_popup)
-        test_marker_local_station_circle = folium.Circle((51.5282581,11.5455341), radius=300, color="lightblue")
+        test_marker_local_station = folium.Marker((51.5282581, 11.5455341), popup=station_info_popup)
+        test_marker_local_station_circle = folium.Circle((51.5282581, 11.5455341), radius=300, color="lightblue")
         test_marker_local_station.add_to(test_marker_fg)
         test_marker_local_station_circle.add_to(test_marker_fg)
 
-        test_marker_decentral_station = folium.Marker((51.5116274,11.5734862), popup=station_info_popup)
-        test_marker_decentral_station_circle = folium.Circle((51.5116274,11.5734862), radius=300, color="cyan")
+        test_marker_decentral_station = folium.Marker((51.5116274, 11.5734862), popup=station_info_popup)
+        test_marker_decentral_station_circle = folium.Circle((51.5116274, 11.5734862), radius=300, color="cyan")
         test_marker_decentral_station.add_to(test_marker_fg)
         test_marker_decentral_station_circle.add_to(test_marker_fg)
 
-        test_marker_rural_central_station = folium.Marker((51.5129271,11.5062205), popup=station_info_popup)
-        test_marker_rural_central_station_circle = folium.Circle((51.5129271,11.5062205), radius=300, color="green")
+        test_marker_rural_central_station = folium.Marker((51.5129271, 11.5062205), popup=station_info_popup)
+        test_marker_rural_central_station_circle = folium.Circle((51.5129271, 11.5062205), radius=300, color="green")
         test_marker_rural_central_station.add_to(test_marker_fg)
         test_marker_rural_central_station_circle.add_to(test_marker_fg)
-
-
 
         test_marker_fg.add_to(self.map)
 
@@ -559,7 +585,7 @@ class Map:
                 index=True):
             counter = 0
             for idx_2, geometry_2, fclass_2, name_2 in stations_geo_data.get(["geometry", "fclass", "name"]).itertuples(
-                index=True):
+                    index=True):
                 if geometry_1.distance(geometry_2) <= 300:
                     counter += 1
 
@@ -569,8 +595,94 @@ class Map:
         return geo_data_frame.to_crs(4326)
 
 
+def get_heat_map(geo_data, bounds, name, exceptions=None, keep_duplicates=False, keep_redundant=False):
+    geo_data.to_crs(4326)
 
+    logging.info("Filtering data...")
+    # filter points in chosen district
+    geo_data = geo_data.drop(['index_right'], axis=1)
+    points_within_bounds = geopandas.sjoin(geo_data, bounds, predicate="within")
+    points_within_bounds = remove_exceptions_from_data(points_within_bounds, exceptions)
+    if not keep_duplicates:
+        points_within_bounds = remove_duplicates(points_within_bounds)
+    if not keep_redundant:
+        points_within_bounds = remove_redundant(points_within_bounds)
+    logging.info("Creating heat map layer...")
+    # make a heat map layer
+    geo_zip = zip(points_within_bounds.get("geometry"), points_within_bounds.get("fclass"))
+
+    stations_array = np.array([(point.y, point.x) for point, fclass in geo_zip])
+
+    return HeatMap(data=stations_array, name=name)
+
+
+def get_geo_data_within_geo_data(data_1, data_2):
+    drop = []
+    data_1 = data_1.to_crs(32643)
+    data_2 = data_2.to_crs(32643)
+    for idx_1, geometry_1, fclass_1, name_1 in data_1.get(["geometry", "fclass", "name"]).itertuples(
+            index=True):
+        counter = 0
+        for idx_2, geometry_2, fclass_2, name_2 in data_2.get(["geometry", "fclass", "name"]).itertuples(
+                index=True):
+            if geometry_1.distance(geometry_2) <= 300:
+                counter += 1
+
+        if counter <= 0:
+            drop.append(idx_1)
+
+    data_1 = data_1.drop(labels=drop, axis=0)
+    return data_1.to_crs(4326)
+
+
+# if __name__ == "__main__":
+#     fmap = Map()
+#     webbrowser.open("templates\\map.html")
 
 if __name__ == "__main__":
-    fmap = Map()
-    webbrowser.open("templates\\map.html")
+    map = folium.Map()
+    bounds = get_bounds(["Einheitsgemeinde.zip", "Gemeinde.zip"],
+                        filter=["Lutherstadt Eisleben", "Hettstedt", "Sangerhausen", "Mansfeld", "Südharz", "Arnstein",
+                                "Gerbstedt"])
+
+
+
+    logging.info(f"Processing transport data")
+    transport_data = geopandas.read_file(
+        ROOT_DIR + rf'/data/transport_stations.zip', encoding='utf-8')
+
+    logging.info(f"Processing poi data")
+    pois_data = geopandas.read_file(
+        ROOT_DIR + rf'/data/pois.zip', encoding='utf-8')
+
+    # reduce the data to mansfeld-südharz only
+    lk_bound = get_bounds(["Landkreise_und_kreisfreie_Staedte.zip"], filter=["Mansfeld-Südharz"])
+    for lk in lk_bound.values():
+        pois_data = geopandas.sjoin(pois_data, lk, predicate="within")
+        transport_data = geopandas.sjoin(transport_data, lk, predicate="within")
+
+    pois_data = get_geo_data_within_geo_data(pois_data, transport_data)
+
+    for name, bound in bounds.items():
+        logging.info(f"Processing: {name}")
+        for geometry in bound.get(
+                ["geometry"]).itertuples(index=False):
+            fg = folium.FeatureGroup(name=name)
+            sim_geo = geopandas.GeoSeries(geometry)
+            geo_j = sim_geo.to_json()
+            geo_folium = folium.GeoJson(data=geo_j, zoom_on_click=True,
+                                        style_function=lambda x: {"color": "black"}, tooltip=name)
+            geo_folium.add_to(fg)
+            fg.add_to(map)
+
+        logging.info(f"Creating heat maps")
+        get_heat_map(transport_data, bounds=bound,
+                     exceptions=transport_station_exceptions,
+                     name=f"{name}: Haltestellen").add_to(map)
+
+        get_heat_map(pois_data, bounds=bound,
+                     exceptions=poi_categories.keys(),
+                     name=f"{name}: Points of Interest", keep_redundant=True, keep_duplicates=True).add_to(map)
+
+    folium.LayerControl().add_to(map)
+    map.save("templates\\map_communal.html")
