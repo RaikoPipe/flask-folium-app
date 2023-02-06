@@ -640,7 +640,9 @@ def get_geo_data_within_geo_data(data_1, data_2):
 #     webbrowser.open("templates\\map.html")
 
 if __name__ == "__main__":
-    map = folium.Map()
+    map = folium.Map(location=(51.5074631, 11.4801049), zoom_start=10, min_zoom=4, tiles="OpenStreetMap")
+    folium.TileLayer("CartoDB positron").add_to(map)
+    folium.TileLayer("CartoDB dark_matter").add_to(map)
     bounds = get_bounds(["Einheitsgemeinde.zip", "Gemeinde.zip"],
                         filter=["Lutherstadt Eisleben", "Hettstedt", "Sangerhausen", "Mansfeld", "Südharz", "Arnstein",
                                 "Gerbstedt"])
