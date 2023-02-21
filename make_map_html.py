@@ -613,7 +613,7 @@ def get_heat_map(geo_data, bounds, name, exceptions=None, keep_duplicates=False,
 
     stations_array = np.array([(point.y, point.x) for point, fclass in geo_zip])
 
-    return HeatMap(data=stations_array, name=name)
+    return HeatMap(data=stations_array, name=name, show=False)
 
 
 def get_geo_data_within_geo_data(data_1, data_2):
@@ -643,9 +643,10 @@ if __name__ == "__main__":
     map = folium.Map(location=(51.5074631, 11.4801049), zoom_start=10, min_zoom=4, tiles="OpenStreetMap")
     folium.TileLayer("CartoDB positron").add_to(map)
     folium.TileLayer("CartoDB dark_matter").add_to(map)
-    bounds = get_bounds(["Einheitsgemeinde.zip", "Gemeinde.zip"],
+    bounds = get_bounds(["Einheitsgemeinde.zip", "Gemeinde.zip", "Verbandsgemeinden.zip"],
                         filter=["Lutherstadt Eisleben", "Hettstedt", "Sangerhausen", "Mansfeld", "Südharz", "Arnstein",
-                                "Gerbstedt"])
+                                "Gerbstedt", "Allstedt", "Mansfelder Grund-Helbra",
+                                "Seegebiet Mansfelder Land", "Goldene Aue"])
 
 
 
@@ -663,7 +664,7 @@ if __name__ == "__main__":
         pois_data = geopandas.sjoin(pois_data, lk, predicate="within")
         transport_data = geopandas.sjoin(transport_data, lk, predicate="within")
 
-    pois_data = get_geo_data_within_geo_data(pois_data, transport_data)
+    pois_data_near_station = get_geo_data_within_geo_data(pois_data, transport_data)
 
     for name, bound in bounds.items():
         logging.info(f"Processing: {name}")
@@ -673,18 +674,22 @@ if __name__ == "__main__":
             sim_geo = geopandas.GeoSeries(geometry)
             geo_j = sim_geo.to_json()
             geo_folium = folium.GeoJson(data=geo_j, zoom_on_click=True,
-                                        style_function=lambda x: {"color": "black"}, tooltip=name)
+                                        style_function=lambda x: {"color": "black"}, tooltip=f"{name}: Verwaltungsgrenzen")
             geo_folium.add_to(fg)
             fg.add_to(map)
 
         logging.info(f"Creating heat maps")
         get_heat_map(transport_data, bounds=bound,
                      exceptions=transport_station_exceptions,
-                     name=f"{name}: Haltestellen").add_to(map)
+                     name=f"{name}: Heatmap Haltestellen").add_to(map)
 
         get_heat_map(pois_data, bounds=bound,
                      exceptions=poi_categories.keys(),
-                     name=f"{name}: Points of Interest", keep_redundant=True, keep_duplicates=True).add_to(map)
+                     name=f"{name}: Heatmap Points of Interest", keep_redundant=True, keep_duplicates=True).add_to(map)
+
+        get_heat_map(pois_data_near_station, bounds=bound,
+                     exceptions=poi_categories.keys(),
+                     name=f"{name}: Heatmap Points of Interest in Haltestellennähe", keep_redundant=True, keep_duplicates=True).add_to(map)
 
     folium.LayerControl().add_to(map)
     map.save("templates\\map_communal.html")
