@@ -1,0 +1,18 @@
+{
+  "description": "Data package with station details to be send to the 3D-Configurator",
+  "title": "StationConfiguration",
+  "type": "SmartMobilityHub",
+  "stationName": "TestStation",
+  "linkedTo": "Bahnhof Eisleben",
+  "geoLocation": {
+    "lat": 51.5184191,
+    "lon": 11.5490143
+  },
+  "plannedModules": {
+    "base": {
+      "quantity": 1,
+      "recommendation": "strong"
+    }
+  }
+
+}

@@ -1,0 +1,54 @@
+{
+  "base": {
+    "name": "Basismodul",
+    "description": "Überdachter Wartebereich, ausgestattet mit Solarpaneelen und Infotainmentsystem",
+    "moduleClass": "Basisaustattung",
+    "acquisitionCost": 2000.50,
+    "operatingCost": 200.50,
+    "shape_properties": {
+      "area_modul": {
+        "x": 1.5,
+        "y": 2.5
+      },
+      "area_access": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "area_access_offset": {
+        "x": 0.5,
+        "y": 0.1
+      },
+      "visual_shape": {
+        "x": 1.5,
+        "y": 2.5,
+        "z": 3.5
+      }
+    }
+  },
+  "bicycle_parking_facility": {
+    "name": "Sammelstellplatzanlage Fahrrad",
+    "description": "Sammelstellplatzanlage für die Unterbringung von privaten Fahrrädern",
+    "moduleClass": "Fahrrad",
+    "acquisitionCost": 2000.50,
+    "operatingCost": 0,
+    "shape_properties": {
+      "area_modul": {
+        "x": 1.5,
+        "y": 2.5
+      },
+      "area_access": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "area_access_offset": {
+        "x": 0.5,
+        "y": 0.1
+      },
+      "visual_shape": {
+        "x": 1.5,
+        "y": 2.5,
+        "z": 3.5
+      }
+    }
+  }
+}
